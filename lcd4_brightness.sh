@@ -1,4 +1,7 @@
 #! /bin/bash
+
+# Applies to BeagleBone Black with LCD4 or compatible display.
+
 # Set LCD4 brightness 0-100 from command line.
 # Insist on being root
 if [[ $EUID -ne 0 ]]; then
