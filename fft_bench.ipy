@@ -1,5 +1,5 @@
 #!/usr/bin/env ipython
-# FFT timing benchmarks (requires ipython package)
+# FFT timing benchmarks (requires ipython and numpy packages)
 
 import math
 import numpy as np

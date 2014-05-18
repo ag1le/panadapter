@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Program iq_dsp.py - Compute spectrum from I/Q data.
-# Copyright (C) 2013 Martin Ewing
+# Copyright (C) 2013-2014 Martin Ewing
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,6 +19,9 @@
 # Contact the author by e-mail: aa6e@arrl.net
 #
 # Part of the iq.py program.
+
+# HISTORY
+# 01-04-2014 Initial Release
 
 import math, time
 import numpy as np
@@ -41,10 +44,6 @@ class DSP(object):
     def GetLogPowerSpectrum(self, data):
         size = self.opt.size            # size of FFT in I,Q samples.
         power_spectrum = np.zeros(size)
-        if self.opt.taking > 0:
-            nbuf_taking = min(self.opt.taking, self.opt.buffers) # if need to shuck load
-        else:
-            nbuf_taking = self.opt.buffers         # faster systems
 
         # Time-domain analysis: Often we have long normal signals interrupted
         # by huge wide-band pulses that degrade our power spectrum average.
@@ -61,7 +60,7 @@ class DSP(object):
         # Calculate our current threshold relative to measured median.
         td_threshold = self.opt.pulse * td_median
         nbuf_taken = 0          # Actual number of buffers accumulated
-        for ic in range(nbuf_taking):
+        for ic in range(self.opt.buffers):
             td_segment = data[ic*size:(ic+1)*size]
             td_max = np.amax(np.abs(td_segment))    # Do we have a noise pulse?
             if td_max < td_threshold:               # No, get pwr spectrum etc.

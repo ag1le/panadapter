@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Program iq_rtl.py - Manage input from RTL_SDR dongle.
-# Copyright (C) 2013 Martin Ewing
+# Copyright (C) 2013-2014 Martin Ewing
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,6 +19,9 @@
 # Contact the author by e-mail: aa6e@arrl.net
 #
 # Part of the iq.py program.
+
+# HISTORY
+# 01-04-2014 Initial release
 
 import rtlsdr
 

@@ -4,6 +4,8 @@
 # This program prints out your system's audio input configuration as seen 
 # by pyaudio (PortAudio).
 
+# Copyright 2013-2014 Martin Ewing
+
 import pyaudio as pa
 
 print """First, you will receive a number of ALSA warnings about unknown PCM cards, etc.

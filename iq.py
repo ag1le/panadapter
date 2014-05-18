@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Program iq.py - spectrum displays from quadrature sampled IF data.
-# Copyright (C) 2013 Martin Ewing
+# Copyright (C) 2013-2014 Martin Ewing
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -27,8 +27,14 @@
 # underlying C/C++ libraries PortAudio, SDL, and rtl-sdr.
 #
 
-# TO DO:
-# Document sources of non-std modules
+# HISTORY
+# 01-04-2014 Initial release (QST article 4/2014)
+# 05-17-2014 Improvements for RPi timing, etc.
+#            Add REV, skip, sp_max/min, v_max/min options
+
+# Note for directfb use (i.e. without X11/Xorg):
+# User must be a member of the following Linux groups:
+#   adm dialout audio video input (plus user's own group, e.g., pi)
 
 import sys,time, threading, os, subprocess
 import pygame as pg
@@ -68,10 +74,11 @@ opt = options.opt   # Get option object from options module
 print "identification:", opt.ident
 print "source        :", opt.source
 print "waterfall     :", opt.waterfall
+print "rev i/q       :", opt.rev_iq
 print "sample rate   :", opt.sample_rate
 print "size          :", opt.size
 print "buffers       :", opt.buffers
-print "taking        :", opt.taking
+print "skipping      :", opt.skip
 print "hamlib        :", opt.hamlib
 print "hamlib rigtype:", opt.hamlib_rigtype
 print "hamlib device :", opt.hamlib_device
@@ -83,7 +90,9 @@ print "hamlib intvl  :", opt.hamlib_interval
 print "cpu load intvl:", opt.cpu_load_interval
 print "wf accum.     :", opt.waterfall_accumulation
 print "wf palette    :", opt.waterfall_palette
-print "max queue dept:", opt.max_queue
+print "sp_min, max   :", opt.sp_min, opt.sp_max
+print "v_min, max    :", opt.v_min, opt.v_max
+#print "max queue dept:", opt.max_queue
 print "PCM290x lagfix:", opt.lagfix
 if opt.lcd4:
     print "LCD4 brightnes:", opt.lcd4_brightness
@@ -113,7 +122,6 @@ class LED(object):
         """
         self.surface = pg.Surface((width, width))
         self.wd2 = width/2
-        #self.colors = colors
         return
 
     def get_LED_surface(self, color):
@@ -132,12 +140,13 @@ class LED(object):
 class Graticule(object):
     """ Create a pygame surface with freq / power (dB) grid
         and units.
-        input: options, pg font, graticule height, width, line color, and text color
+        input: options, pg font, graticule height, width, line color, 
+            and text color
     """
     def __init__(self, opt, font, h, w, color_l, color_t):
         self.opt = opt
-        self.sp_max = -20   # default max value (dB)
-        self.sp_min = -120  # default min value
+        self.sp_max = opt.sp_max #-20   # default max value (dB)
+        self.sp_min = opt.sp_min #-120  # default min value
         self.font = font    # font to use for text
         self.h = h          # height of graph area
         self.w = w          # width
@@ -251,7 +260,7 @@ if opt.lcd4:                        # setup for directfb (non-X) graphics
     SCREEN_SIZE = (480,272)         # default size for the 4" LCD (480x272)
     SCREEN_MODE = pg.FULLSCREEN
     # If we are root, we can set up LCD4 brightness.
-    brightness = str(min(100, max(0, opt.lcd4_brightness)))     # validated string
+    brightness = str(min(100, max(0, opt.lcd4_brightness)))  # validated string
     # Find path of script (same directory as iq.py) and append brightness value
     cmd = os.path.join( os.path.split(sys.argv[0])[0], "lcd4_brightness.sh") \
         + " %s" % brightness
@@ -278,7 +287,7 @@ w_middle = w_spectra/2          # mid point of spectrum
 x_spectra = (w_main-w_spectra) / 2.0    # x coord. of spectrum on screen
 
 h_2d = 2*SCREEN_SIZE[1]/3 if opt.waterfall \
-            else SCREEN_SIZE[1]                    # height of 2d spectrum display
+            else SCREEN_SIZE[1]         # height of 2d spectrum display
 h_2d -= 25 # compensate for LCD4 overscan?
 y_2d = 20. # y position of 2d disp. (screen top = 0)
 
@@ -288,21 +297,10 @@ if opt.size > w_spectra:
     for n in [1024, 512, 256, 128]:
         if n <= w_spectra:
             print "*** Size was reset from %d to %d." % (opt.size, n)
-            opt.size = n    # Force size to be 2**k (ok, but may not be best choice)
+            opt.size = n    # Force size to be 2**k (ok, reasonable choice?)
             break
 chunk_size = opt.buffers * opt.size # No. samples per chunk (pyaudio callback)
 chunk_time = float(chunk_size) / opt.sample_rate
-
-# Initialize input mode, RTL or AF
-if opt.source=="rtl":             # input from RTL dongle
-    import iq_rtl as rtl
-    dataIn = rtl.RTL_In(opt)
-elif opt.source=='audio':         # input from audio card
-    import iq_af as af
-    dataIn = af.DataInput(opt)
-else:
-    print "unrecognized mode"
-    quit_all()
 
 myDSP = dsp.DSP(opt)            # Establish DSP logic
 
@@ -315,17 +313,17 @@ led_urun = LED(10)
 led_clip = LED(10)
 
 # Waterfall geometry
-h_wf = SCREEN_SIZE[1]/3             # Height of waterfall (3d spectrum)
+h_wf = SCREEN_SIZE[1]/3         # Height of waterfall (3d spectrum)
 y_wf = y_2d + h_2d              # Position just below 2d surface
 
 # Surface for waterfall (3d) spectrum
 surf_wf = pg.Surface((w_spectra, h_wf))
 
-pg.display.set_caption(opt.ident)     # Title for main window
+pg.display.set_caption(opt.ident)       # Title for main window
 
 # Establish fonts for screen text.
 lgfont = pg.font.SysFont('sans', 16)
-lgfont_ht = lgfont.get_linesize()           # text height
+lgfont_ht = lgfont.get_linesize()       # text height
 medfont = pg.font.SysFont('sans', 12)
 medfont_ht = medfont.get_linesize()
 smfont = pg.font.SysFont('mono', 9)
@@ -335,9 +333,8 @@ smfont_ht = smfont.get_linesize()
 wf_pixel_size = (w_spectra/opt.size, h_wf/WF_LINES)
 
 # min, max dB for wf palette
-v_min = -120       # lower end (dB)
-v_max = -20      # higher end
-nsteps = 50     # number of distinct colors
+v_min, v_max = opt.v_min, opt.v_max     # lower/higher end (dB)
+nsteps = 50                             # number of distinct colors
 
 if opt.waterfall:
     # Instantiate the waterfall and palette data
@@ -354,7 +351,8 @@ if opt.hamlib:
     
     # Create thread for Hamlib freq. checking.  
     # Helps to even out the loop timing, maybe.
-    hl_thread = threading.Thread(target=updatefreq, args = (opt.hamlib_interval, rig))
+    hl_thread = threading.Thread(target=updatefreq, 
+                        args = (opt.hamlib_interval, rig))
     hl_thread.daemon = True
     hl_thread.start()
     print "Hamlib thread started."
@@ -369,7 +367,7 @@ print "CPU monitor thread started."
 
 # Create graticule providing 2d graph calibration.
 mygraticule = Graticule(opt, smfont, h_2d, w_spectra, GRAT_COLOR, GRAT_COLOR_2)
-sp_min, sp_max  =  sp_min_def, sp_max_def  =  -120, -20
+sp_min, sp_max  =  sp_min_def, sp_max_def  =  opt.sp_min, opt.sp_max
 mygraticule.set_range(sp_min, sp_max)
 surf_2d_graticule = mygraticule.make()
 
@@ -380,9 +378,23 @@ parms_msg = "Fs = %d Hz; Res. = %.1f Hz;" \
       (opt.sample_rate, float(opt.sample_rate)/opt.size, opt.size, w_spectra, 
       float(opt.size*opt.buffers)/opt.sample_rate)
 wparms, hparms = medfont.size(parms_msg)
-parms_matter = pg.Surface((wparms, hparms) )#, flags=pg.SRCALPHA)
+parms_matter = pg.Surface((wparms, hparms) )
 parms_matter.blit(medfont.render(parms_msg, 1, TCOLOR2), (0,0))
 
+print "Update interval = %.2f ms" % float(1000*chunk_time)
+
+# Initialize input mode, RTL or AF
+# This starts the input stream, so place it close to start of main loop.
+if opt.source=="rtl":             # input from RTL dongle
+    import iq_rtl as rtl
+    dataIn = rtl.RTL_In(opt)
+elif opt.source=='audio':         # input from audio card
+    import iq_af as af
+    mainqueueLock = af.queueLock    # queue and lock only for soundcard
+    dataIn = af.DataInput(opt)
+else:
+    print "unrecognized mode"
+    quit_all()
 
 # ** MAIN PROGRAM LOOP **
 
@@ -394,14 +406,14 @@ t_last_data = 0.
 nframe = 0
 t_frame0 = time.time()
 led_overflow_ct = 0
-print "Update interval = %.2f ms" % float(1000*chunk_time)
-
+startqueue = True
 while True:
 
-    nframe += 1                 # keep track of loops for possible bookkeeping
+    nframe += 1                 # keep track of loop count FWIW
 
     # Each time through the main loop, we reconstruct the main screen
-    surf_main.fill(BGCOLOR)                 # Erase with background color
+
+    surf_main.fill(BGCOLOR)     # Erase with background color
 
     # Each time through this loop, we receive an audio chunk, containing
     # multiple buffers.  The buffers have been transformed and the log power
@@ -409,8 +421,6 @@ while True:
     # plotted in the "2d" graph area.  After a number of log spectra are
     # displayed in the "2d" graph, a new line of the waterfall is generated.
     
-    #surf_main.blit(top_matter, (10,10))     # static operating info
-
     # Line of text with receiver center freq. if available
     if opt.hamlib:
         msg = "%.3f kHz" % rigfreq   # take current rigfreq from hamlib thread
@@ -444,33 +454,35 @@ while True:
         surf_main.blit(medfont.render(msg, 1, BLACK, BGCOLOR), (25, y_2d-hh))
         surf_main.blit(sled, (10, y_2d-hh))
 
-    if opt.source=='rtl':                        # Input from RTL-SDR dongle
+    if opt.source=='rtl':               # Input from RTL-SDR dongle
         iq_data_cmplx = dataIn.ReadSamples(chunk_size)
+        if opt.rev_iq:                  # reverse spectrum?
+            iq_data_cmplx = np.imag(iq_data_cmplx)+1j*np.real(iq_data_cmplx)
         time.sleep(0.05)                # slow down if fast PC
         stats = [ 0, 0]                 # for now...
     else:                               # Input from audio card
         # In its separate thread, a chunk of audio data has accumulated.
         # When ready, pull log power spectrum data out of queue.
-        while dataIn.dataqueue.qsize() < 2:
-            time.sleep(0.1 * chunk_time )
-        my_in_data_s = dataIn.dataqueue.get(True, 2.0)  # block w/timeout
-        dataIn.dataqueue.task_done()
+        my_in_data_s = dataIn.get_queued_data() # timeout protected
 
         # Convert string of 16-bit I,Q samples to complex floating
         iq_local = np.fromstring(my_in_data_s,dtype=np.int16).astype('float32')
-        re_d = np.array(iq_local[1::2])                      # right input (I)
-        im_d = np.array(iq_local[0::2])                      # left  input (Q)
+        re_d = np.array(iq_local[1::2]) # right input (I)
+        im_d = np.array(iq_local[0::2]) # left  input (Q)
 
         # The PCM290x chip has 1 lag offset of R wrt L channel. Fix, if needed.
         if opt.lagfix:
             im_d = np.roll(im_d, 1)
         # Get some stats (max values) to monitor gain settings, etc.
         stats = [int(np.amax(re_d)), int(np.amax(im_d))]
-        iq_data_cmplx = np.array(re_d + im_d*1j)
+        if opt.rev_iq:      # reverse spectrum?
+            iq_data_cmplx = np.array(im_d + re_d*1j)
+        else:               # normal spectrum
+            iq_data_cmplx = np.array(re_d + im_d*1j)
 
     sp_log = myDSP.GetLogPowerSpectrum(iq_data_cmplx)
-    if opt.source=='rtl': # Boost rtl spectrum (arbitrary amount)
-        sp_log += 60    # RTL data were normalized to +/- 1.
+    if opt.source=='rtl':   # Boost rtl spectrum (arbitrary amount)
+        sp_log += 60        # RTL data were normalized to +/- 1.
     
     yscale = float(h_2d)/(sp_max-sp_min)    # yscale is screen units per dB
     # Set the 2d surface to background/graticule.
@@ -499,7 +511,8 @@ while True:
         # This takes cpu time, so don't recompute it too often. (DSP & graphics
         # are still running.)
         info_counter = ( info_counter + 1 ) % INFO_CYCLE
-        if info_counter == 1:           # First time through, and every INFO_CYCLE-th time thereafter.
+        if info_counter == 1:
+            # First time through, and every INFO_CYCLE-th time thereafter.
             # Some button labels to show at right of LCD4 window
             # Add labels for LCD4 buttons.
             place_buttons = False
@@ -515,11 +528,11 @@ while True:
             # Info comes in 4 phases (0 - 3), cycle among them with <return>
             if info_phase == 1:
                 lines = [ "KEYBOARD CONTROLS:",
-                          "(R) Reset display; (Q) Quit program",
-                          "Change upper plot dB limit:  (U) increase; (u) decrease",
-                          "Change lower plot dB limit:  (L) increase; (l) decrease",
-                          "Change WF palette upper limit: (B) increase; (b) decrease",
-                          "Change WF palette lower limit: (D) increase; (d) decrease" ]
+                  "(R) Reset display; (Q) Quit program",
+                  "Change upper plot dB limit:  (U) increase; (u) decrease",
+                  "Change lower plot dB limit:  (L) increase; (l) decrease",
+                  "Change WF palette upper limit: (B) increase; (b) decrease",
+                  "Change WF palette lower limit: (D) increase; (d) decrease" ]
                 if opt.source=='rtl' or opt.hamlib:
                     lines.append("Change rcvr freq: (rt arrow) increase; (lt arrow) decrease")
                     lines.append("   Use SHIFT for bigger steps")
@@ -544,7 +557,7 @@ while True:
             wh = (0, 0)
             for il in lines:                # Find max line width, height
                 wh = map(max, wh, medfont.size(il))
-            help_matter = pg.Surface((wh[0]+24, len(lines)*wh[1]+15) )#, flags=pg.SRCALPHA)
+            help_matter = pg.Surface((wh[0]+24, len(lines)*wh[1]+15) )
             for ix,x in enumerate(lines):
                 help_matter.blit(medfont.render(x, 1, TCOLOR2), (20,ix*wh[1]+15))
             
@@ -574,11 +587,15 @@ while True:
         surf_main.blit(live_surface,(20,SCREEN_SIZE[1]-60))
 
     # Check for pygame events - keyboard, etc.
+    # Note: A key press is not recorded as a PyGame event if you are 
+    # connecting via SSH.  In that case, use --sp_min/max and --v_min/max
+    # command line options to set scales.
+
     for event in pg.event.get():
         if event.type == pg.QUIT:
             quit_all()
         elif event.type == pg.KEYDOWN:
-            if info_phase <= 1:         # Normal operation (0) or help phase 1 (1)
+            if info_phase <= 1:         # Normal op. (0) or help phase 1 (1)
                 # We usually want left or right shift treated the same!
                 shifted = event.mod & (pg.KMOD_LSHIFT | pg.KMOD_RSHIFT)
                 if event.key == pg.K_q:
@@ -624,8 +641,8 @@ while True:
                     if opt.waterfall:
                         v_min, v_max = mywf.reset_range()
 
-                # Note that LCD peripheral buttons are Right, Left, Up, Down arrows
-                # and "Enter".  (Same as keyboard buttons)
+                # Note that LCD peripheral buttons are Right, Left, Up, Down
+                # arrows and "Enter".  (Same as keyboard buttons)
 
                 elif event.key == pg.K_RIGHT:        # right arrow + freq
                     if opt.source=='rtl':
@@ -652,13 +669,13 @@ while True:
                 elif event.key == pg.K_DOWN:
                     print "Down"
                 elif event.key == pg.K_RETURN:
-                    info_phase += 1                 # Jump to phase 1 or phase 2 overlay
-                    info_counter = 0                #   (next time)
+                    info_phase += 1             # Jump to phase 1 or 2 overlay
+                    info_counter = 0            #   (next time)
 
-            # We can have an alternate set of keyboard (LCD button) responses for each
-            # "phase" of the on-screen help system.
+            # We can have an alternate set of keyboard (LCD button) responses
+            # for each "phase" of the on-screen help system.
             
-            elif info_phase == 2:                   # Listen for info phase 2 keys
+            elif info_phase == 2:               # Listen for info phase 2 keys
                 # Showing 2d spectrum gain/offset adjustments
                 # Note: making graticule is moderately slow.  
                 # Do not repeat range changes too quickly!
@@ -684,10 +701,10 @@ while True:
                     surf_2d_graticule = mygraticule.make()   
                 elif event.key == pg.K_RETURN:
                     info_phase = 3 if opt.waterfall \
-                            else 0                  # Next is phase 3 unless no WF.
+                            else 0              # Next is phase 3 unless no WF.
                     info_counter = 0
 
-            elif info_phase == 3:                   # Listen for info phase 3 keys
+            elif info_phase == 3:               # Listen for info phase 3 keys
                 # Showing waterfall pallette adjustments
                 # Note: recalculating palette is quite slow.  
                 # Do not repeat range changes too quickly! (1 per second max?)
@@ -710,7 +727,6 @@ while True:
                 elif event.key == pg.K_RETURN:
                     info_phase = 0                  # Turn OFF overlay
                     info_counter = 0
-
     # Finally, update display for user
     pg.display.update()
 
