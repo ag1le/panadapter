@@ -458,7 +458,7 @@ while True:
         iq_data_cmplx = dataIn.ReadSamples(chunk_size)
         if opt.rev_iq:                  # reverse spectrum?
             iq_data_cmplx = np.imag(iq_data_cmplx)+1j*np.real(iq_data_cmplx)
-        time.sleep(0.05)                # slow down if fast PC
+        #time.sleep(0.05)                # slow down if fast PC
         stats = [ 0, 0]                 # for now...
     else:                               # Input from audio card
         # In its separate thread, a chunk of audio data has accumulated.

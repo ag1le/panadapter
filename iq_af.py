@@ -44,22 +44,17 @@ import pyaudio as pa
 
 # Global variables (in this module's namespace!)
 # globals are required to communicate with callback thread.
-led_underrun_ct = 0     # buffer underrun LED 
+led_underrun_ct = 0             # buffer underrun LED 
 cbcount = 0
 MAXQUEUELEN = 32                # Don't use iq-opt for this?
 cbqueue = Queue.Queue(MAXQUEUELEN)  # will be queue to transmit af data
 cbskip_ct = 0
 queueLock = threading.Lock()    # protect queue accesses
 cbfirst = 1                     # Skip this many buffers at start
-#err_status = None
-#err_time_info = None
 def pa_callback_iqin(in_data, f_c, time_info, status):
     global cbcount, cbqueue, cbskip, cbskip_ct
-    #global err_status, err_time_info
     global led_underrun_ct, queueLock, cbfirst
     
-    #err_status = status             # for debugging in case of hangup
-    #err_time_info = time_info
     cbcount += 1
 
     if status == pa.paInputOverflow:

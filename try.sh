@@ -1,4 +1,5 @@
 #!/bin/bash
+# Uncomment exactly one test line.
 
 # Audio test, Raspberry Pi, iMic soundcard, USB 1.1 ~85% cpu load
 # Use 'nice -20 ...' when running at highest CPU utilization.
@@ -7,6 +8,8 @@
 # RTL Test, Raspberry Pi
 #python iq.py --RTL --WATERFALL --rtl_gain=0 --n_buffers=12 --size=384 --REV  
 
-# Audio test, BBB, iMic, USB 2.0 ~75% cpu load
-/home/martin/iq/iq.py --index=-1 --size=256 --n_buffers=6 --WATERFALL 
+# Audio test, BBB, iMic, USB 2.0 ~90% cpu load
+python iq.py --index=-1 --size=256 --n_buffers=6 --WATERFALL --HAMLIB
 
+# RTL Test, BBB  ~95% cpu  [ Set extra RTL delay in iq.py to zero]
+#python iq.py --RTL --WATERFALL --n_buffers=10 --size=384 

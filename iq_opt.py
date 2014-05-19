@@ -43,8 +43,6 @@ op.add_option("--LAGFIX", action="store_true", dest="lagfix",
     help="Special mode to fix PCM290x R/L offset.")
 op.add_option("--LCD4", action="store_true", dest="lcd4",
     help='Use 4" LCD instead of large screen')
-#op.add_option("--RPI", action="store_true", dest="device_rpi",
-#    help="Set up some defaults for Raspberry Pi")
 op.add_option("--RTL", action="store_true", dest="source_rtl",
     help="Set source to RTL-SDR")
 op.add_option("--REV", action="store_true", dest="rev_iq",
@@ -69,9 +67,6 @@ op.add_option("--index", action="store", type="int", dest="index",
         "selects default input device.")
 op.add_option("--lcd4_brightness", action="store", type="int", dest="lcd4_brightness",
     help="LCD4 display brightness 0 - 100")
-# Now set as constant in iq_af.py
-#op.add_option("--max_queue", action="store", type="int", dest="max_queue",
-#    help="Real-time queue depth")
 op.add_option("--n_buffers", action="store", type="int", dest="buffers",
     help="Number of FFT buffers in 'chunk', default 12")
 op.add_option("--pulse_clip", action="store", type="int", dest="pulse",
@@ -82,8 +77,6 @@ op.add_option("--rtl_gain", action="store", type="int", dest="rtl_gain",
     help="RTL_SDR gain, default 0.")
 op.add_option("--size", action="store", type="int", dest="size",
     help="size of FFT.  Default is 512.")
-#op.add_option("--take", action="store", type="int", dest="taking",
-#    help="No. of buffers to take per chunk, must be <= buffers.")
 op.add_option("--skip", action="store", type="int", dest="skip",
     help="Skipping input data parameter >= 0")
 op.add_option("--sp_min", action="store", type="int", dest="sp_min",
@@ -115,20 +108,18 @@ op.set_defaults(
     lagfix                  = False,    # Fix up PCM 290x bug
     lcd4                    = False,    # default large screen
     lcd4_brightness         = 75,       # brightness 0 - 100
-#    max_queue               = 30,       # max depth of queue from audio callback
     pulse                   = 10,       # pulse clip threshold
     rev_iq                  = False,    # Reverse I & Q
     rtl_frequency           = 146.e6,   # RTL center freq. Hz
     rtl_gain                = 0,        # auto
     sample_rate             = DEF_SAMPLE_RATE,    # (stereo) frames/second (Hz)
-    size                    = 384,      # size of FFT --> freq. resolution (RPi-256)
+    size                    = 384,      # size of FFT --> freq. resolution
     skip                    = 0,        # if not =0, skip some input data
     source_rtl              = False,    # Use sound card, not RTL-SDR input
     sp_min                  =-120,      # dB relative to clipping, at bottom of grid
     sp_max                  =-20,       # dB relative to clipping, at top of grid
     v_min                   =-120,      # palette starts at this level
     v_max                   =-20,       # palette ends at this level
-#    taking                  = -1,       # 0 < taking < buffers to cut cpu load, -1=all
     waterfall               = False,    # Using waterfall? T/F
     waterfall_accumulation  = 4,        # No. of spectra per waterfall line
     waterfall_palette       = 2         # choose a waterfall color scheme
@@ -137,7 +128,7 @@ op.set_defaults(
 opt, args = op.parse_args()
 
 # This is an "option" that the user can't change.
-opt.ident = "IQ.PY v. 0.40 de AA6E"
+opt.ident = "IQ.PY v. 0.30 de AA6E"
 
 # --RTL option forces source=rtl, but normally source=audio
 opt.source = "rtl" if opt.source_rtl else "audio"
