@@ -1,0 +1,16 @@
+# pyrtlsdr uses numpy internally
+
+# rtlsdr requires the librtlsdr library from http://sdr.osmocom.org/trac/wiki/rtl-sdr.
+#   git clone git://git.osmocom.org/rtl-sdr.git
+#   cd rtl-sdr
+#   autoreconf -i
+#   ./configure
+#   make
+#   sudo make install
+#   sudo make install-udev-rules
+
+# The pyrlsdr (rtlsdr) module is from
+#   git https://github.com/roger-/pyrtlsdr.git
+#   sudo python setup.py install
+
+
