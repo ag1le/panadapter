@@ -23,6 +23,7 @@
 # HISTORY
 # 01-04-2014 Initial release
 # 05-05-2014 Changed options
+# 05-31-2014 Si570 control (vs RTL control vs None [af])
 
 import optparse
 
@@ -30,6 +31,7 @@ import optparse
 
 # Note options changed:  
 # Add "skip", "REV", remove "RPI", "taking", "max_queue"
+# Add --SI570
 
 # Set up command line parser. (Use iq.py --help to see a formatted qlisting.)
 op = optparse.OptionParser()
@@ -45,6 +47,8 @@ op.add_option("--LCD4", action="store_true", dest="lcd4",
     help='Use 4" LCD instead of large screen')
 op.add_option("--RTL", action="store_true", dest="source_rtl",
     help="Set source to RTL-SDR")
+op.add_option("--SI570", action="store_true", dest="control_si570",
+    help="Set freq control to Si570, not RTL or Hamlib")
 op.add_option("--REV", action="store_true", dest="rev_iq",
     help="Reverse I & Q to reverse spectrum display")
 op.add_option("--WATERFALL", action="store_true", dest="waterfall",
@@ -75,6 +79,8 @@ op.add_option("--rtl_freq", action="store", type="float", dest="rtl_frequency",
     help="Initial RTL operating frequency (float kHz)")
 op.add_option("--rtl_gain", action="store", type="int", dest="rtl_gain",
     help="RTL_SDR gain, default 0.")
+op.add_option("--si570_frequency", action="store", type="float", dest="si570_frequency",
+    help="Si570 LO initial frequency, (float kHz)")
 op.add_option("--size", action="store", type="int", dest="size",
     help="size of FFT.  Default is 512.")
 op.add_option("--skip", action="store", type="int", dest="skip",
@@ -98,6 +104,7 @@ op.add_option("--waterfall_palette", action="store", type="int", dest="waterfall
 DEF_SAMPLE_RATE = 48000
 op.set_defaults(
     buffers                 = 12,       # no. buffers in sample chunk (RPi-40)
+    control_si570           = False,    # normally, talk to RTL or Hamlib for freq info
     cpu_load_interval       = 3.0,      # cycle time for CPU monitor thread
     fullscreen              = False,    # Use full screen mode? (if not LCD4)
     hamlib                  = False,    # Using Hamlib? T/F (RPi-False)
@@ -113,6 +120,7 @@ op.set_defaults(
     rtl_frequency           = 146.e6,   # RTL center freq. Hz
     rtl_gain                = 0,        # auto
     sample_rate             = DEF_SAMPLE_RATE,    # (stereo) frames/second (Hz)
+    si570_frequency         = 7050.0,   # initial freq. for Si570 LO.
     size                    = 384,      # size of FFT --> freq. resolution
     skip                    = 0,        # if not =0, skip some input data
     source_rtl              = False,    # Use sound card, not RTL-SDR input
@@ -128,10 +136,21 @@ op.set_defaults(
 opt, args = op.parse_args()
 
 # This is an "option" that the user can't change.
-opt.ident = "IQ.PY v. 0.30 de AA6E"
+opt.ident = "IQ.PY v. 0.35 de AA6E"
 
-# --RTL option forces source=rtl, but normally source=audio
-opt.source = "rtl" if opt.source_rtl else "audio"
+# 'source' refers to signal source (RTL or audio sound card)
+# 'control' refers to freq. readout/control (RTL, si570, or none)
+
+opt.control = "none"
+if opt.hamlib:
+    opt.control = "hamlib"
+if opt.source_rtl:
+    opt.source = "rtl"
+    opt.control= "rtl"
+else:
+    opt.source = "audio"
+    if opt.control_si570:
+        opt.control = "si570"
 
 # Change default Freq for RTL to an appropriate (legal) value (tnx KF3EB)
 # However, do not override user's --rate setting, if present.

@@ -31,6 +31,9 @@
 # 01-04-2014 Initial release (QST article 4/2014)
 # 05-17-2014 Improvements for RPi timing, etc.
 #            Add REV, skip, sp_max/min, v_max/min options
+# 05-31-2014 Add Si570 freq control option (DDS chip provided in SoftRock, eg.)
+#           Note: Use of Si570 requires libusb-1.0 wrapper from 
+#           https://pypi.python.org/pypi/libusb1/1.2.0
 
 # Note for directfb use (i.e. without X11/Xorg):
 # User must be a member of the following Linux groups:
@@ -73,6 +76,7 @@ opt = options.opt   # Get option object from options module
 # print list of parameters to console.
 print "identification:", opt.ident
 print "source        :", opt.source
+print "freq control  :", opt.control
 print "waterfall     :", opt.waterfall
 print "rev i/q       :", opt.rev_iq
 print "sample rate   :", opt.sample_rate
@@ -82,8 +86,11 @@ print "skipping      :", opt.skip
 print "hamlib        :", opt.hamlib
 print "hamlib rigtype:", opt.hamlib_rigtype
 print "hamlib device :", opt.hamlib_device
-print "rtl frequency :", opt.rtl_frequency
-print "rtl gain      :", opt.rtl_gain
+if opt.source=="rtl":
+    print "rtl frequency :", opt.rtl_frequency
+    print "rtl gain      :", opt.rtl_gain
+if opt.control=="si570":
+    print "si570 frequency :", opt.si570_frequency
 print "pulse         :", opt.pulse
 print "fullscreen    :", opt.fullscreen
 print "hamlib intvl  :", opt.hamlib_interval
@@ -340,7 +347,9 @@ if opt.waterfall:
     # Instantiate the waterfall and palette data
     mywf = wf.Wf(opt, v_min, v_max, nsteps, wf_pixel_size)
 
-if opt.hamlib:
+if (opt.control == "si570") and opt.hamlib:
+    print "Warning: Hamlib requested with si570.  Si570 wins! No Hamlib."
+if opt.hamlib and (opt.control != "si570"):
     import Hamlib
     # start up Hamlib rig connection
     Hamlib.rig_set_debug (Hamlib.RIG_DEBUG_NONE)
@@ -385,7 +394,7 @@ print "Update interval = %.2f ms" % float(1000*chunk_time)
 
 # Initialize input mode, RTL or AF
 # This starts the input stream, so place it close to start of main loop.
-if opt.source=="rtl":             # input from RTL dongle
+if opt.source=="rtl":             # input from RTL dongle (and freq control)
     import iq_rtl as rtl
     dataIn = rtl.RTL_In(opt)
 elif opt.source=='audio':         # input from audio card
@@ -395,6 +404,11 @@ elif opt.source=='audio':         # input from audio card
 else:
     print "unrecognized mode"
     quit_all()
+
+if opt.control=="si570":
+    import si570control
+    mysi570 = si570control.Si570control()
+    mysi570.setFreq(opt.si570_frequency / 1000.)    # Set starting freq.
 
 # ** MAIN PROGRAM LOOP **
 
@@ -422,11 +436,17 @@ while True:
     # displayed in the "2d" graph, a new line of the waterfall is generated.
     
     # Line of text with receiver center freq. if available
-    if opt.hamlib:
+    showfreq = True
+    if opt.control == "si570":
+        msg = "%.3f kHz" % (mysi570.getFreqByValue() * 1000.) # freq/4 from Si570
+    elif opt.hamlib:
         msg = "%.3f kHz" % rigfreq   # take current rigfreq from hamlib thread
-    elif opt.source=='rtl':
+    elif opt.control=='rtl':
         msg = "%.3f MHz" % (dataIn.rtl.get_center_freq()/1.e6)
-    if opt.hamlib or (opt.source=='rtl'):
+    else:
+        showfreq = False
+
+    if showfreq:
         # Center it and blit just above 2d display
         ww, hh = lgfont.size(msg)
         surf_main.blit(lgfont.render(msg, 1, BLACK, BGCOLOR), 
@@ -533,7 +553,7 @@ while True:
                   "Change lower plot dB limit:  (L) increase; (l) decrease",
                   "Change WF palette upper limit: (B) increase; (b) decrease",
                   "Change WF palette lower limit: (D) increase; (d) decrease" ]
-                if opt.source=='rtl' or opt.hamlib:
+                if opt.control != "none":
                     lines.append("Change rcvr freq: (rt arrow) increase; (lt arrow) decrease")
                     lines.append("   Use SHIFT for bigger steps")
                 lines.append("RETURN - Cycle to next Help screen")
@@ -645,31 +665,35 @@ while True:
                 # arrows and "Enter".  (Same as keyboard buttons)
 
                 elif event.key == pg.K_RIGHT:        # right arrow + freq
-                    if opt.source=='rtl':
+                    if opt.control == 'rtl':
                         finc = 100e3 if shifted else 10e3
                         dataIn.rtl.center_freq = dataIn.rtl.get_center_freq()+finc
-                    else:       # audio mode
-                        if opt.hamlib:
-                            finc = 1.0 if shifted else 0.1
-                            rigfreq_request = rigfreq + finc
-                        else:
-                            print "Rt arrow ignored, no Hamlib"
+                    elif opt.control == 'si570':
+                        finc = 1.0 if shifted else 0.1
+                        mysi570.setFreqByValue(mysi570.getFreqByValue() + finc*.001)
+                    elif opt.hamlib:
+                        finc = 1.0 if shifted else 0.1
+                        rigfreq_request = rigfreq + finc
+                    else:
+                        print "Rt arrow ignored, no Hamlib"
                 elif event.key == pg.K_LEFT:         # left arrow - freq
-                    if opt.source=='rtl':
+                    if opt.control == 'rtl':
                         finc = -100e3 if shifted else -10e3
                         dataIn.rtl.center_freq = dataIn.rtl.get_center_freq()+finc
-                    else:       # audio mode
-                        if opt.hamlib:
-                            finc = -1.0 if shifted else -0.1
-                            rigfreq_request = rigfreq + finc
-                        else:
-                            print "Lt arrow ignored, no Hamlib"
+                    elif opt.control == 'si570':
+                        finc = -1.0 if shifted else -0.1
+                        mysi570.setFreqByValue(mysi570.getFreqByValue() + finc*.001)
+                    elif opt.hamlib:
+                        finc = -1.0 if shifted else -0.1
+                        rigfreq_request = rigfreq + finc
+                    else:
+                        print "Lt arrow ignored, no Hamlib"
                 elif event.key == pg.K_UP:
                     print "Up"
                 elif event.key == pg.K_DOWN:
                     print "Down"
                 elif event.key == pg.K_RETURN:
-                    info_phase += 1             # Jump to phase 1 or 2 overlay
+                    info_phase  += 1            # Jump to phase 1 or 2 overlay
                     info_counter = 0            #   (next time)
 
             # We can have an alternate set of keyboard (LCD button) responses
