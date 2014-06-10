@@ -136,7 +136,7 @@ op.set_defaults(
 opt, args = op.parse_args()
 
 # This is an "option" that the user can't change.
-opt.ident = "IQ.PY v. 0.35 de AA6E"
+opt.ident = "IQ.PY v. 0.3.6 de AA6E"
 
 # 'source' refers to signal source (RTL or audio sound card)
 # 'control' refers to freq. readout/control (RTL, si570, or none)
