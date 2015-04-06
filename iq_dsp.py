@@ -63,13 +63,14 @@ class DSP(object):
         for ic in range(self.opt.buffers):
             td_segment = data[ic*size:(ic+1)*size]
             td_max = np.amax(np.abs(td_segment))    # Do we have a noise pulse?
-            if td_max < td_threshold:               # No, get pwr spectrum etc.
+            if  True: #td_max < td_threshold:               # No, get pwr spectrum etc.
                 # EXPERIMENTAL TAPER
                 td_segment *= self.w
                 fd_spectrum = fft.fft(td_segment)
                 # Frequency-domain:
                 # Rotate array to place 0 freq. in center.  (It was at left.)
                 fd_spectrum_rot = np.fft.fftshift(fd_spectrum)
+                
                 # Compute the real-valued squared magnitude (ie power) and 
                 # accumulate into pwr_acc.
                 # fastest way to sum |z|**2 ??
@@ -79,11 +80,17 @@ class DSP(object):
             else:                                   # Yes, abort buffer.
                 self.rejected_count += 1
                 self.led_clip_ct = 1       # flash a red light
+                
                 #if DEBUG: print "REJECT! %d" % self.rejected_count
         if nbuf_taken > 0:
             power_spectrum = power_spectrum / nbuf_taken     # normalize the sum.
         else:
             power_spectrum = np.ones(size)             # if no good buffers!
+        # AG1LE: remove midpoint 
+        midpoint = self.opt.size/2
+        #power_spectrum[midpoint-1]=1e-8
+        power_spectrum[midpoint]=1e-8
+        #power_spectrum[midpoint+1]=1e-8
         # Convert to dB. Note log(0) = "-inf" in Numpy. It can happen if ADC 
         # isn't working right. Numpy issues a warning.
         log_power_spectrum = 10. * np.log10(power_spectrum)

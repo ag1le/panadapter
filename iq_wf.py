@@ -110,6 +110,8 @@ class Wf(object):
             self.datasize = len(datalist)           # pick up dimension of datalist
             self.wfacc = np.zeros(self.datasize)    # and establish accumulator
             self.dx = float(surface.get_width()) / self.datasize # x spacing of wf cells
+            self.dy = float(surface.get_height()) / self.datasize # y spacing of wf cells
+            self.width = surface.get_width()
             # Note: self.dx must be >= 1
             self.wfcount = 0
             self.firstcalc = False
@@ -118,13 +120,15 @@ class Wf(object):
         if self.wfcount % nsum != 0:        # Don't plot wf data until enough spectra accumulated
             return
         else:
-            surface.blit(surface, (0, self.pixel_size[1]))  # push old wf down one row
-            for ix in xrange(self.datasize):
-                v = datalist[ix] #self.wfacc[ix] / nsum #datalist[ix]        # dB units
+            #surface.blit(surface, (0,self.pixel_size[0]))  #push old wf down one row
+            surface.scroll(-1,0)  # AG1LE:  scroll waterfall to left by pixel 
+            for iy in xrange(self.datasize):
+                v = datalist[iy] #self.wfacc[ix] / nsum #datalist[ix]        # dB units
                 vi = int( self.nsteps * (v-self.vmin) / (self.vmax-self.vmin) )
                 vi = max(0, min(vi, self.nsteps-1) )
-                px_surf = self.pixels[vi]
-                x = int(ix * self.dx)
-                surface.blit(px_surf, (x, 0))
+                px_surf = self.pixels[vi] #paint spectrum pixels
+                y = int(iy * self.dy)
+                surface.blit(px_surf, (self.width-1,y))       # AG1LE: was surface.blit(px_surf, ( 0,x))
             self.wfcount = 0                        # Initialize counter
             self.wfacc.fill(0)                      #   and accumulator
+	

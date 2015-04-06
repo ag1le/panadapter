@@ -44,6 +44,7 @@ import pygame as pg
 import numpy  as np
 import iq_dsp as dsp
 import iq_wf  as wf
+import iq_sc  as sc
 import iq_opt as options
 
 # Some colors in PyGame style
@@ -55,7 +56,7 @@ RED =      (255,   0,   0)
 YELLOW =   (192, 192,   0)
 DARK_RED = (128,   0,   0)
 LITE_RED = (255, 100, 100)
-BGCOLOR =  (255, 230, 200)
+BGCOLOR =  (128, 128, 128)  # AG1LE was: 255,230,200
 BLUE_GRAY= (100, 100, 180)
 ORANGE =   (255, 150,   0)
 GRAY =     (192, 192, 192)
@@ -97,6 +98,8 @@ print "hamlib intvl  :", opt.hamlib_interval
 print "cpu load intvl:", opt.cpu_load_interval
 print "wf accum.     :", opt.waterfall_accumulation
 print "wf palette    :", opt.waterfall_palette
+print "spectrum      :", opt.spectrum
+print "scope         :", opt.scope
 print "sp_min, max   :", opt.sp_min, opt.sp_max
 print "v_min, max    :", opt.v_min, opt.v_max
 #print "max queue dept:", opt.max_queue
@@ -274,10 +277,11 @@ if opt.lcd4:                        # setup for directfb (non-X) graphics
     # (The subprocess script is a no-op if we are not root.)
     subprocess.call(cmd, shell=True)    # invoke shell script
 else:
-    SCREEN_MODE = pg.FULLSCREEN if opt.fullscreen else 0
-    SCREEN_SIZE = (640, 512) if opt.waterfall \
-                     else (640,310) # NB: graphics may not scale well
-WF_LINES = 50                      # How many lines to use in the waterfall
+    SCREEN_MODE = pg.FULLSCREEN if opt.fullscreen else pg.RESIZABLE | pg.DOUBLEBUF | pg.HWSURFACE
+    # width, height 
+    SCREEN_SIZE = (1035, 512) if opt.waterfall \
+                     else (640,310) # NB: graphics may not scale well (640,310)
+WF_LINES = 150                      # How many lines to use in the waterfall (50)
 
 # Initialize pygame (pg)
 # We should not use pg.init(), because we don't want pg audio functions.
@@ -293,7 +297,8 @@ w_spectra = w_main-10           # Allow a small margin, left and right
 w_middle = w_spectra/2          # mid point of spectrum
 x_spectra = (w_main-w_spectra) / 2.0    # x coord. of spectrum on screen
 
-h_2d = 2*SCREEN_SIZE[1]/3 if opt.waterfall \
+
+h_2d = 1*SCREEN_SIZE[1]/4 if opt.waterfall \
             else SCREEN_SIZE[1]         # height of 2d spectrum display
 h_2d -= 25 # compensate for LCD4 overscan?
 y_2d = 20. # y position of 2d disp. (screen top = 0)
@@ -301,7 +306,7 @@ y_2d = 20. # y position of 2d disp. (screen top = 0)
 # NB: transform size must be <= w_spectra.  I.e., need at least one
 # pixel of width per data point.  Otherwise, waterfall won't work, etc.
 if opt.size > w_spectra:
-    for n in [1024, 512, 256, 128]:
+    for n in [2048,1024, 512, 256, 128]:
         if n <= w_spectra:
             print "*** Size was reset from %d to %d." % (opt.size, n)
             opt.size = n    # Force size to be 2**k (ok, reasonable choice?)
@@ -320,7 +325,7 @@ led_urun = LED(10)
 led_clip = LED(10)
 
 # Waterfall geometry
-h_wf = SCREEN_SIZE[1]/3         # Height of waterfall (3d spectrum)
+h_wf = 3*SCREEN_SIZE[1]/4         # Height of waterfall (3d spectrum)
 y_wf = y_2d + h_2d              # Position just below 2d surface
 
 # Surface for waterfall (3d) spectrum
@@ -341,11 +346,13 @@ wf_pixel_size = (w_spectra/opt.size, h_wf/WF_LINES)
 
 # min, max dB for wf palette
 v_min, v_max = opt.v_min, opt.v_max     # lower/higher end (dB)
-nsteps = 50                             # number of distinct colors
+nsteps = 128                             # number of distinct colors
 
 if opt.waterfall:
     # Instantiate the waterfall and palette data
     mywf = wf.Wf(opt, v_min, v_max, nsteps, wf_pixel_size)
+if opt.scope: 
+	mysc = sc.Sc(opt.sample_rate)
 
 if (opt.control == "si570") and opt.hamlib:
     print "Warning: Hamlib requested with si570.  Si570 wins! No Hamlib."
@@ -421,6 +428,7 @@ nframe = 0
 t_frame0 = time.time()
 led_overflow_ct = 0
 startqueue = True
+freq = 600.						# AG1LE: nominal morse frequency
 while True:
 
     nframe += 1                 # keep track of loop count FWIW
@@ -499,6 +507,7 @@ while True:
             iq_data_cmplx = np.array(im_d + re_d*1j)
         else:               # normal spectrum
             iq_data_cmplx = np.array(re_d + im_d*1j)
+    
 
     sp_log = myDSP.GetLogPowerSpectrum(iq_data_cmplx)
     if opt.source=='rtl':   # Boost rtl spectrum (arbitrary amount)
@@ -514,17 +523,24 @@ while True:
     ylist = [ h_2d - x for x in ylist ]                 # flip the y's
     lylist = len(ylist)
     xlist = [ x* w_spectra/lylist for x in xrange(lylist) ]
-    # Draw the spectrum based on our data lists.
-    pg.draw.lines(surf_2d, WHITE, False, zip(xlist,ylist), 1)
 
-    # Place 2d spectrum on main surface
-    surf_main.blit(surf_2d, (x_spectra, y_2d))
+    if opt.scope: #AG1LE: added scope display to see the signal
+        mysc.calculate(re_d,surf_2d,freq)
+        surf_main.blit(surf_2d, (0, 0))    
+        
+    if opt.spectrum:
+        # Draw the spectrum based on our data lists.
+        pg.draw.lines(surf_2d, GREEN, False, zip(xlist,ylist), 1)
+
+        # Place 2d spectrum on main surface
+        surf_main.blit(surf_2d, (x_spectra, y_2d))
 
     if opt.waterfall:
         # Calculate the new Waterfall line and blit it to main surface
         nsum = opt.waterfall_accumulation    # 2d spectra per wf line
         mywf.calculate(sp_log, nsum, surf_wf)
         surf_main.blit(surf_wf, (x_spectra, y_wf+1))
+        pg.display.update()
 
     if info_phase > 0:
         # Assemble and show semi-transparent overlay info screen
@@ -751,6 +767,18 @@ while True:
                 elif event.key == pg.K_RETURN:
                     info_phase = 0                  # Turn OFF overlay
                     info_counter = 0
+        elif event.type == pg.MOUSEMOTION:
+            pos = pg.mouse.get_pos()
+            y = (-2.*((pos[1]-y_wf) / h_wf) + 1.)
+            freq = y*float(opt.sample_rate/2.) 
+            print freq 
+            
+        elif event.type == pg.MOUSEBUTTONDOWN:
+            pos = pg.mouse.get_pos()
+            y = (-2.*((pos[1]-y_wf) / h_wf) + 1.)
+            freq = y*float(opt.sample_rate/2.) 
+            print freq
+            rigfreq_request = freq/1000. +rigfreq
     # Finally, update display for user
     pg.display.update()
 

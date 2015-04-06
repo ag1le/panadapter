@@ -86,6 +86,7 @@ def pa_callback_iqin(in_data, f_c, time_info, status):
     except Queue.Full:
         print "ERROR: Internal queue is filled.  Reconfigure to use less CPU."
         print "\n\n (Ignore remaining errors!)"
+        #time.sleep(100)
         sys.exit()
     return (None, pa.paContinue)    # Return to pyaudio.  All OK.
 # END OF CALLBACK ROUTINE

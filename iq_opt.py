@@ -53,6 +53,10 @@ op.add_option("--REV", action="store_true", dest="rev_iq",
     help="Reverse I & Q to reverse spectrum display")
 op.add_option("--WATERFALL", action="store_true", dest="waterfall",
     help="Use waterfall display.")
+op.add_option("--spectrum", action="store_true", dest="spectrum",
+    help="Use spectrum display.")
+op.add_option("--scope", action="store_true", dest="scope",
+    help="Use scope display.")
 
 # Options with a parameter.
 op.add_option("--cpu_load_intvl", action="store", type="float", dest="cpu_load_interval",
@@ -103,15 +107,15 @@ op.add_option("--waterfall_palette", action="store", type="int", dest="waterfall
 # command line.  You may want to edit them to be close to your normal operating needs.
 DEF_SAMPLE_RATE = 48000
 op.set_defaults(
-    buffers                 = 12,       # no. buffers in sample chunk (RPi-40)
+    buffers                 = 4,       # no. buffers 2 in sample chunk (RPi-40)
     control_si570           = False,    # normally, talk to RTL or Hamlib for freq info
     cpu_load_interval       = 3.0,      # cycle time for CPU monitor thread
     fullscreen              = False,    # Use full screen mode? (if not LCD4)
-    hamlib                  = False,    # Using Hamlib? T/F (RPi-False)
-    hamlib_device           = "/dev/ttyUSB0",   # Device address for Hamlib I/O
+    hamlib                  = True,    # Using Hamlib? T/F (RPi-False)
+    hamlib_device           = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9015X78-if00-port0", #"/dev/ttyUSB0",   # Device address for Hamlib I/O
     hamlib_interval         = 1.0,      # Wait between hamlib freq. checks (secs)    
     hamlib_rigtype          = 229,      # Elecraft K3/KX3.
-    index                   = -1,       # index of audio device (-1 use default)
+    index                   = 0,       # index of audio device 0 (-1 use default)
     lagfix                  = False,    # Fix up PCM 290x bug
     lcd4                    = False,    # default large screen
     lcd4_brightness         = 75,       # brightness 0 - 100
@@ -120,16 +124,18 @@ op.set_defaults(
     rtl_frequency           = 146.e6,   # RTL center freq. Hz
     rtl_gain                = 0,        # auto
     sample_rate             = DEF_SAMPLE_RATE,    # (stereo) frames/second (Hz)
+    scope                   = False,    # use scope display 
     si570_frequency         = 7050.0,   # initial freq. for Si570 LO.
-    size                    = 384,      # size of FFT --> freq. resolution
+    size                    = 256,      # size of FFT --> freq. resolution
     skip                    = 0,        # if not =0, skip some input data
     source_rtl              = False,    # Use sound card, not RTL-SDR input
-    sp_min                  =-120,      # dB relative to clipping, at bottom of grid
-    sp_max                  =-20,       # dB relative to clipping, at top of grid
-    v_min                   =-120,      # palette starts at this level
-    v_max                   =-20,       # palette ends at this level
-    waterfall               = False,    # Using waterfall? T/F
-    waterfall_accumulation  = 4,        # No. of spectra per waterfall line
+    spectrum                = False,    # Use spectrum display 
+    sp_min                  =-40,      # dB relative to clipping, at bottom of grid
+    sp_max                  =-10,       # dB relative to clipping, at top of grid
+    v_min                   =-40,      # palette starts at this level
+    v_max                   =-10,       # palette ends at this level
+    waterfall               = True,    # Using waterfall? T/F
+    waterfall_accumulation  = 1,        # No. of spectra per waterfall line = 2
     waterfall_palette       = 2         # choose a waterfall color scheme
     )
 
